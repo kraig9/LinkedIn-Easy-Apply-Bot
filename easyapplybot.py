@@ -387,6 +387,51 @@ class EasyApplyBot:
 
         return
 
+    def answer_other_questions(self):
+        try:
+            from selenium.webdriver.common.by import By
+            from selenium.webdriver.support.ui import Select
+            from selenium.common.exceptions import NoSuchElementException
+
+            # Get all input, button, and select elements
+            elements = self.browser.find_elements(By.XPATH, '//input | //button | //select')
+
+            for element in elements:
+                # Check if the element is an input field
+                if element.tag_name == 'input':
+                    # Get the placeholder or label text
+                    placeholder = element.get_attribute('placeholder')
+                    try:
+                        parent = element.find_element(By.XPATH, '..')
+                        label = parent.find_element(By.XPATH, './/label').text
+                    except NoSuchElementException:
+                        label = ''
+
+                    # If the placeholder or label contains the word "years", clear the input field and send "5"
+                    if 'years' in placeholder.lower() or 'years' in label.lower():
+                        element.clear()
+                        element.send_keys('5')
+
+                # Check if the element is a button and if it's a "yes" button, click it
+                elif element.tag_name == 'button' and 'yes' in element.text.lower():
+                    element.click()
+
+                # Check if the element is a dropdown
+                elif element.tag_name == 'select':
+                    select = Select(element)
+                    # Iterate over the options and select "yes" if it's available
+                    for option in select.options:
+                        if 'yes' in option.text.lower():
+                            select.select_by_visible_text(option.text)
+                            break
+
+            # After all changes have been made, find the submit or next button and click it
+            submit_or_next_button = self.browser.find_element(By.XPATH, '//button[contains(text(), "submit") or contains(text(), "next")]')
+            submit_or_next_button.click()
+
+        except Exception as e:
+            logging.error(f"An error occurred in answer_other_questions: {str(e)}")
+
 
     def get_elements(self, type) -> list:
         elements = []
@@ -465,7 +510,8 @@ class EasyApplyBot:
                     elif len(elements) > 0:
                         while len(elements) > 0:
                             log.info("Please answer the questions, waiting 5 seconds...")
-                            time.sleep(5)
+                            self.answer_other_questions()
+                            # time.sleep(5)
                             elements = self.get_elements("error")
                             if "application was sent" in self.browser.page_source:
                                 log.info("Application Submitted")
@@ -481,7 +527,7 @@ class EasyApplyBot:
                     #self.process_questions()
                     else:
                         log.info("Application not submitted")
-                        time.sleep(2)
+                        time.sleep(2) 
                         break
                     # self.process_questions()
 
