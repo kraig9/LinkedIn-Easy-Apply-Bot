@@ -206,7 +206,8 @@ class EasyApplyBot:
 
         count_application = 0
         count_job = 0
-        jobs_per_page = 0
+        jobs_per_page = 10
+
         start_time: float = time.time()
 
         log.info("Looking for jobs.. Please wait..")
@@ -252,14 +253,18 @@ class EasyApplyBot:
                 
                     # children selector is the container of the job cards on the left
                     for link in links:
-                            if 'Applied' not in link.text: #checking if applied already
+                            if 'Applied' not in link.text and 'Viewed' not in link.text: #checking if applied already
                                 if link.text not in self.blacklist: #checking if blacklisted
                                     jobID = link.get_attribute("data-job-id")
+                                    if jobID in self.appliedJobIDs:
+                                        log.info(f"Already applied to {jobID}")
+                                        continue
                                     if jobID == "search":
                                         log.debug("Job ID not found, search keyword found instead? {}".format(link.text))
                                         continue
                                     else:
                                         jobIDs[jobID] = "To be processed"
+                    log.debug("job ids is: " + str(jobIDs))
                     if len(jobIDs) > 0:
                         self.apply_loop(jobIDs)
                     self.browser, jobs_per_page = self.next_jobs_page(position,
@@ -281,6 +286,7 @@ class EasyApplyBot:
                     log.info(f"Applied to {jobID}")
                 else:
                     log.info(f"Failed to apply to {jobID}")
+                self.appliedJobIDs.append(jobID)
                 jobIDs[jobID] == applied
 
     def apply_to_job(self, jobID):
@@ -394,7 +400,7 @@ class EasyApplyBot:
             from selenium.common.exceptions import NoSuchElementException
 
             # Get all input, button, and select elements
-            elements = self.browser.find_elements(By.XPATH, '//input | //button | //select')
+            elements = self.browser.find_elements(By.XPATH, '//input | //button | //select | //textarea | //datalist')
 
             for element in elements:
                 # Check if the element is an input field
@@ -411,9 +417,19 @@ class EasyApplyBot:
                     if 'years' in placeholder.lower() or 'years' in label.lower():
                         element.clear()
                         element.send_keys('5')
+                    elif 'salary' in placeholder.lower() or 'salary' in label.lower():
+                        element.clear()
+                        element.send_keys('125000')
+                    elif 'city' in placeholder.lower() or 'city' in label.lower():
+                        element.clear()
+                        element.send_keys('Fort Worth, Texas, United States')
+                    elif '1-10' in placeholder.lower() or '1-10' in label.lower():
+                        element.clear()
+                        element.send_keys('10')
 
                 # Check if the element is a button and if it's a "yes" button, click it
-                elif element.tag_name == 'button' and 'yes' in element.text.lower():
+                elif (element.tag_name == 'button' or element.tag_name == 'radio') \
+                    and ('yes' in element.text.lower() or 'agree' in element.text.lower() or 'accept' in element.text.lower()):
                     element.click()
 
                 # Check if the element is a dropdown
@@ -465,8 +481,9 @@ class EasyApplyBot:
 
             submitted = False
             loop = 0
+            stuck = False
             while loop < 2:
-                time.sleep(1)
+                time.sleep(random.uniform(1.5, 2.5))
                 # Upload resume
                 if is_present(upload_resume_locator):
                     #upload_locator = self.browser.find_element(By.NAME, "file")
@@ -510,8 +527,13 @@ class EasyApplyBot:
                     elif len(elements) > 0:
                         while len(elements) > 0:
                             log.info("Please answer the questions, waiting 5 seconds...")
+                            log.info("stuck is: " + str(stuck))
                             self.answer_other_questions()
                             # time.sleep(5)
+                            if stuck == True:
+                                log.info("Stuck in loop, breaking")
+                                return False
+                            stuck = True
                             elements = self.get_elements("error")
                             if "application was sent" in self.browser.page_source:
                                 log.info("Application Submitted")
@@ -521,6 +543,7 @@ class EasyApplyBot:
                                 log.info("Skipping application")
                                 submitted = False
                                 break
+                            
                         continue
                         #add explicit wait
                     # for element in elements:
@@ -675,13 +698,16 @@ class EasyApplyBot:
         pyautogui.press('esc')
 
     def next_jobs_page(self, position, location, jobs_per_page):
+        next_url = "https://www.linkedin.com/jobs/search/?f_LF=f_AL&keywords=" + \
+            position + location + "&start=" + str(jobs_per_page)
         self.browser.get(
             # URL for jobs page
             "https://www.linkedin.com/jobs/search/?f_LF=f_AL&keywords=" +
             position + location + "&start=" + str(jobs_per_page))
         #self.avoid_lock()
-        log.info("Loading next job page?")
+        log.info("Loading next job page? " + str(next_url))
         self.load_page()
+        jobs_per_page += 10
         return (self.browser, jobs_per_page)
 
     # def finish_apply(self) -> None:
